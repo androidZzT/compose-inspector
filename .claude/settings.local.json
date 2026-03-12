@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "defaultMode": "bypassPermissions",
+    "deny": [
+      "Bash(rm -rf *)",
+      "Bash(git push *)",
+      "Bash(chmod *)",
+      "Read(./.env)",
+      "Read(*/keystore.*)"
+    ]
+  }
+}
