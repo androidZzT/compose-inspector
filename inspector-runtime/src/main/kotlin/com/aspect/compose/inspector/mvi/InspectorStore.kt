@@ -1,17 +1,29 @@
 package com.aspect.compose.inspector.mvi
 
+import android.util.Log
 import androidx.compose.ui.tooling.data.Group
 import androidx.compose.ui.tooling.data.UiToolingDataApi
 import com.aspect.compose.inspector.core.CompositionTreeParser
 import com.aspect.compose.inspector.core.RecompositionTracker
 import com.aspect.compose.inspector.core.SubcompositionResolver
 import com.aspect.compose.inspector.model.InspectorNode
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+
+private const val TAG = "InspectorStore"
 
 /**
  * MVI Store that processes [InspectorIntent]s and produces [InspectorState].
+ *
+ * Tree parsing is performed asynchronously on [Dispatchers.Default] to avoid
+ * blocking the main thread, as SlotTable traversal can be expensive (~800ms
+ * for complex UIs).
  */
 @OptIn(UiToolingDataApi::class)
 class InspectorStore(
@@ -20,64 +32,72 @@ class InspectorStore(
     private val recompositionTracker: RecompositionTracker = RecompositionTracker()
 ) {
 
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
     private val _state = MutableStateFlow(InspectorState())
     val state: StateFlow<InspectorState> = _state.asStateFlow()
 
     private var lastRootGroup: Group? = null
 
     fun dispatch(intent: InspectorIntent) {
-        val currentState = _state.value
-        _state.value = reduce(currentState, intent)
-    }
-
-    private fun reduce(state: InspectorState, intent: InspectorIntent): InspectorState {
-        return when (intent) {
+        when (intent) {
             is InspectorIntent.AttachTo -> {
                 lastRootGroup = intent.rootGroup
-                parseTree(state, intent.rootGroup)
+                _state.value = _state.value.copy(isLoading = true, error = null)
+                parseTreeAsync(intent.rootGroup)
             }
 
             is InspectorIntent.RefreshTree -> {
-                val group = lastRootGroup ?: return state.copy(
-                    error = "No composition attached"
-                )
-                parseTree(state, group)
+                val group = lastRootGroup
+                if (group == null) {
+                    _state.value = _state.value.copy(error = "No composition attached")
+                } else {
+                    _state.value = _state.value.copy(isLoading = true, error = null)
+                    parseTreeAsync(group)
+                }
             }
 
             is InspectorIntent.SelectNode -> {
-                val node = findNode(state.tree, intent.nodeId)
-                state.copy(selectedNode = node)
+                val node = findNode(_state.value.tree, intent.nodeId)
+                _state.value = _state.value.copy(selectedNode = node)
             }
 
             is InspectorIntent.ToggleExpand -> {
-                val expanded = state.expandedNodeIds.toMutableSet()
+                val expanded = _state.value.expandedNodeIds.toMutableSet()
                 if (intent.nodeId in expanded) {
                     expanded.remove(intent.nodeId)
                 } else {
                     expanded.add(intent.nodeId)
                 }
-                state.copy(expandedNodeIds = expanded)
+                _state.value = _state.value.copy(expandedNodeIds = expanded)
             }
 
             is InspectorIntent.ToggleOverlay -> {
-                state.copy(isOverlayVisible = !state.isOverlayVisible)
+                _state.value = _state.value.copy(isOverlayVisible = !_state.value.isOverlayVisible)
             }
         }
     }
 
-    private fun parseTree(state: InspectorState, rootGroup: Group): InspectorState {
-        return try {
-            val tree = treeParser.parse(rootGroup)
-            state.copy(
-                tree = tree.roots,
-                isLoading = false,
-                error = null
-            )
-        } catch (e: Exception) {
-            state.copy(
-                isLoading = false,
-                error = "Failed to parse tree: ${e.message}"
-            )
+    fun destroy() {
+        scope.cancel()
+    }
+
+    private fun parseTreeAsync(rootGroup: Group) {
+        scope.launch {
+            try {
+                val tree = treeParser.parse(rootGroup)
+                _state.value = _state.value.copy(
+                    tree = tree.roots,
+                    isLoading = false,
+                    error = null
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to parse composition tree", e)
+                _state.value = _state.value.copy(
+                    isLoading = false,
+                    error = "Failed to parse tree: ${e.message}"
+                )
+            }
         }
     }
 

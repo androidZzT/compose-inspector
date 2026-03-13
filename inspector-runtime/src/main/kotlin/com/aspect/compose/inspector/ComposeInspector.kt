@@ -1,5 +1,6 @@
 package com.aspect.compose.inspector
 
+import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -30,6 +31,8 @@ import com.aspect.compose.inspector.mvi.InspectorIntent
 import com.aspect.compose.inspector.mvi.InspectorStore
 import com.aspect.compose.inspector.ui.InspectorOverlay
 
+private const val TAG = "ComposeInspector"
+
 /**
  * Entry point for Compose Inspector.
  *
@@ -58,11 +61,14 @@ fun ComposeInspector(
     }
 
     val recompositionTracker = remember { RecompositionTracker() }
-    val treeParser = remember { CompositionTreeParser(recompositionTracker) }
+    val subcompositionResolver = remember { SubcompositionResolver() }
+    val treeParser = remember {
+        CompositionTreeParser(recompositionTracker, subcompositionResolver)
+    }
     val store = remember {
         InspectorStore(
             treeParser = treeParser,
-            subcompositionResolver = SubcompositionResolver(),
+            subcompositionResolver = subcompositionResolver,
             recompositionTracker = recompositionTracker
         )
     }
@@ -83,8 +89,8 @@ fun ComposeInspector(
                 try {
                     val rootGroup = composer.compositionData.asTree()
                     store.dispatch(InspectorIntent.AttachTo(rootGroup))
-                } catch (_: Exception) {
-                    // Composition data may not be available
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to read composition data", e)
                 }
                 store.dispatch(InspectorIntent.ToggleOverlay)
             }
@@ -104,8 +110,8 @@ fun ComposeInspector(
                     try {
                         val rootGroup = composer.compositionData.asTree()
                         store.dispatch(InspectorIntent.AttachTo(rootGroup))
-                    } catch (_: Exception) {
-                        // Ignore parse failures on refresh
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to refresh composition data", e)
                     }
                 },
                 onDismiss = {

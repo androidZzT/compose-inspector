@@ -1,9 +1,12 @@
 package com.aspect.compose.inspector.core
 
+import android.util.Log
 import androidx.compose.runtime.tooling.CompositionData
 import androidx.compose.ui.tooling.data.Group
 import androidx.compose.ui.tooling.data.UiToolingDataApi
 import androidx.compose.ui.tooling.data.asTree
+
+private const val TAG = "SubcompositionResolver"
 
 /**
  * Resolves subcompositions (e.g., LazyColumn, SubcomposeLayout, Dialog)
@@ -30,8 +33,8 @@ class SubcompositionResolver {
             if (datum is CompositionData) {
                 try {
                     result.add(datum.asTree())
-                } catch (_: Exception) {
-                    // Skip subcompositions that fail to parse
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to parse subcomposition", e)
                 }
             }
         }

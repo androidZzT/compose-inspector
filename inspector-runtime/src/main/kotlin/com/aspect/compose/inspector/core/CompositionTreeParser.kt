@@ -1,5 +1,6 @@
 package com.aspect.compose.inspector.core
 
+import android.util.Log
 import androidx.compose.ui.tooling.data.Group
 import androidx.compose.ui.tooling.data.NodeGroup
 import androidx.compose.ui.tooling.data.UiToolingDataApi
@@ -7,6 +8,8 @@ import androidx.compose.ui.unit.IntRect
 import com.aspect.compose.inspector.model.InspectorNode
 import com.aspect.compose.inspector.model.InspectorTree
 import com.aspect.compose.inspector.model.NodeParameter
+
+private const val TAG = "CompositionTreeParser"
 
 /**
  * Parses Compose SlotTable into an [InspectorTree] using the tooling data API.
@@ -16,24 +19,39 @@ import com.aspect.compose.inspector.model.NodeParameter
  */
 @OptIn(UiToolingDataApi::class)
 class CompositionTreeParser(
-    private val recompositionTracker: RecompositionTracker? = null
+    private val recompositionTracker: RecompositionTracker? = null,
+    private val subcompositionResolver: SubcompositionResolver? = null
 ) {
 
-    private var idCounter = 0
-
     fun parse(rootGroup: Group): InspectorTree {
-        idCounter = 0
-        val roots = parseGroup(rootGroup, depth = 0)
-        return InspectorTree(roots = roots)
+        val roots = parseGroup(rootGroup, depth = 0, siblingIndex = 0)
+
+        // Also parse subcompositions if resolver is available
+        val subRoots = subcompositionResolver?.let { resolver ->
+            try {
+                resolver.findSubcompositions(rootGroup).flatMap { subGroup ->
+                    parseGroup(subGroup, depth = 0, siblingIndex = 0)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to resolve subcompositions", e)
+                emptyList()
+            }
+        } ?: emptyList()
+
+        return InspectorTree(roots = roots + subRoots)
     }
 
-    private fun parseGroup(group: Group, depth: Int): List<InspectorNode> {
+    private fun parseGroup(group: Group, depth: Int, siblingIndex: Int): List<InspectorNode> {
         val isNodeGroup = group is NodeGroup
         val name = extractName(group)
         val hasLayoutNode = group.modifierInfo.isNotEmpty() || isNodeGroup
 
         if (hasLayoutNode && name.isNotEmpty()) {
-            val nodeId = generateId(name, depth)
+            val nodeId = generateStableId(group, name, depth, siblingIndex)
+            val children = mutableListOf<InspectorNode>()
+            group.children.forEachIndexed { index, child ->
+                children.addAll(parseGroup(child, depth + 1, index))
+            }
             val node = InspectorNode(
                 id = nodeId,
                 name = name,
@@ -41,18 +59,21 @@ class CompositionTreeParser(
                 parameters = extractParameters(group),
                 bounds = extractBounds(group),
                 recompositionCount = recompositionTracker?.getCount(nodeId) ?: 0,
-                children = group.children.flatMap { parseGroup(it, depth + 1) },
+                children = children,
                 depth = depth
             )
             return listOf(node)
         }
 
         // Not a meaningful node — pass through to children
-        return group.children.flatMap { parseGroup(it, depth) }
+        val result = mutableListOf<InspectorNode>()
+        group.children.forEachIndexed { index, child ->
+            result.addAll(parseGroup(child, depth, index))
+        }
+        return result
     }
 
     private fun extractName(group: Group): String {
-        // Use the group name which corresponds to the composable function name
         return group.name ?: ""
     }
 
@@ -72,18 +93,27 @@ class CompositionTreeParser(
         }
     }
 
-    private fun extractBounds(group: Group): IntRect {
+    private fun extractBounds(group: Group): IntRect? {
         val box = group.box
-        return IntRect(
-            left = box.left,
-            top = box.top,
-            right = box.right,
-            bottom = box.bottom
-        )
+        // Return null for zero-area bounds (no layout info)
+        return if (box.left == 0 && box.top == 0 && box.right == 0 && box.bottom == 0) {
+            null
+        } else {
+            IntRect(left = box.left, top = box.top, right = box.right, bottom = box.bottom)
+        }
     }
 
-    private fun generateId(name: String, depth: Int): String {
-        return "${name}_${depth}_${idCounter++}"
+    /**
+     * Generates a stable ID based on Group's own properties.
+     * Uses key, name, depth, and sibling index to produce consistent IDs
+     * across multiple parse passes of the same tree structure.
+     */
+    private fun generateStableId(group: Group, name: String, depth: Int, siblingIndex: Int): String {
+        val key = group.key?.hashCode() ?: 0
+        val locationHash = group.location?.let {
+            "${it.sourceFile}:${it.lineNumber}".hashCode()
+        } ?: 0
+        return "${name}_d${depth}_s${siblingIndex}_k${key}_l${locationHash}"
     }
 
     private fun Any.toDisplayString(): String {

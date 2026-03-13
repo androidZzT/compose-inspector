@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.aspect.compose.inspector.model.InspectorNode
+import com.aspect.compose.inspector.model.InspectorTree
 import com.aspect.compose.inspector.mvi.InspectorState
 
 /**
@@ -58,7 +59,7 @@ fun InspectorOverlay(
             Column {
                 // Toolbar
                 InspectorToolbar(
-                    nodeCount = state.tree.size,
+                    nodeCount = InspectorTree(state.tree).nodeCount,
                     onRefresh = onRefresh,
                     onClose = onDismiss
                 )
