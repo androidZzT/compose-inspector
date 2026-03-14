@@ -49,3 +49,7 @@ captures/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Claude Code — local-only files
+.claude/settings.local.json
+.claude/worktrees/

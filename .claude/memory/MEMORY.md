@@ -1,0 +1,4 @@
+- [project_overview.md](./project_overview.md) — 项目定位、模块结构、技术栈、已完成/待开发功能清单
+- [user_profile.md](./user_profile.md) — 用户角色和交流偏好
+- [feedback_team_mode.md](./feedback_team_mode.md) — 所有需求必须走团队流程（architect→coder→tester），禁止跳过直接开发
+- [feedback_device_verify.md](./feedback_device_verify.md) — 任务完成后必须构建APK安装到设备验证，通过后才能提交代码
