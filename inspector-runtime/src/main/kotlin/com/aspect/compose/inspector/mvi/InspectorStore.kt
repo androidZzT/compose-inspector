@@ -43,8 +43,30 @@ class InspectorStore(
         when (intent) {
             is InspectorIntent.AttachTo -> {
                 lastRootGroup = intent.rootGroup
-                _state.value = _state.value.copy(isLoading = true, error = null)
+                _state.value = _state.value.copy(isLoading = true, error = null, isOverlayVisible = true)
                 parseTreeAsync(intent.rootGroup)
+            }
+
+            is InspectorIntent.AttachLayoutTree -> {
+                // Auto-expand first 3 levels for immediate visibility
+                val expandedIds = mutableSetOf<String>()
+                fun collectIds(nodes: List<InspectorNode>, depth: Int) {
+                    if (depth >= 3) return
+                    for (node in nodes) {
+                        if (node.children.isNotEmpty()) {
+                            expandedIds.add(node.id)
+                        }
+                        collectIds(node.children, depth + 1)
+                    }
+                }
+                collectIds(intent.tree.roots, 0)
+                _state.value = _state.value.copy(
+                    tree = intent.tree.roots,
+                    expandedNodeIds = expandedIds,
+                    isLoading = false,
+                    isOverlayVisible = true,
+                    error = null
+                )
             }
 
             is InspectorIntent.RefreshTree -> {

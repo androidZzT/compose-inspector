@@ -29,7 +29,8 @@ class CompositionTreeParser(
         // Also parse subcompositions if resolver is available
         val subRoots = subcompositionResolver?.let { resolver ->
             try {
-                resolver.findSubcompositions(rootGroup).flatMap { subGroup ->
+                val subs = resolver.findSubcompositions(rootGroup)
+                subs.flatMap { subGroup ->
                     parseGroup(subGroup, depth = 0, siblingIndex = 0)
                 }
             } catch (e: Exception) {

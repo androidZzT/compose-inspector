@@ -79,15 +79,15 @@ private fun TreeNodeRow(
         if (hasChildren) {
             Text(
                 text = if (isExpanded) "\u25BC" else "\u25B6",
-                fontSize = 10.sp,
+                fontSize = 12.sp,
                 modifier = Modifier
-                    .size(20.dp)
+                    .size(24.dp)
                     .clickable(onClick = onExpandClick)
-                    .padding(4.dp),
+                    .padding(2.dp),
                 color = MaterialTheme.colorScheme.onSurface
             )
         } else {
-            Spacer(modifier = Modifier.size(20.dp))
+            Spacer(modifier = Modifier.size(24.dp))
         }
 
         Spacer(modifier = Modifier.width(4.dp))
