@@ -5,12 +5,16 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import com.aspect.compose.inspector.core.LayoutNodeTreeParser
+import com.aspect.compose.inspector.core.RecompositionTracker
 import com.aspect.compose.inspector.mvi.InspectorIntent
 import com.aspect.compose.inspector.mvi.InspectorStore
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 private const val TAG = "ComposeInspector"
 
@@ -40,12 +44,23 @@ fun ComposeInspector(
     }
 
     val store = remember { InspectorStore() }
-    val layoutNodeParser = remember { LayoutNodeTreeParser() }
+    val tracker = remember { RecompositionTracker() }
+    val layoutNodeParser = remember { LayoutNodeTreeParser(tracker) }
     val rootView = LocalView.current
     val context = LocalContext.current
 
     // Render user content directly — no wrapper Box, no extra UI nodes
     content()
+
+    // Auto-refresh: re-parse every 2 seconds while overlay is visible
+    LaunchedEffect(rootView) {
+        while (isActive) {
+            delay(2000)
+            if (store.state.value.isOverlayVisible) {
+                parseFromLayoutNodes(rootView, layoutNodeParser, store)
+            }
+        }
+    }
 
     // Manage the inspector window lifecycle in a separate window
     DisposableEffect(rootView) {

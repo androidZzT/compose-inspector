@@ -6,6 +6,7 @@ import androidx.compose.ui.unit.IntRect
 import com.aspect.compose.inspector.model.InspectorNode
 import com.aspect.compose.inspector.model.InspectorTree
 import com.aspect.compose.inspector.model.NodeParameter
+import java.util.Objects
 
 private const val TAG = "LayoutNodeTreeParser"
 
@@ -19,7 +20,9 @@ private const val TAG = "LayoutNodeTreeParser"
  * - Modifier details (padding, size, background, etc.) from the Modifier.Node chain
  * - Layout bounds from NodeCoordinator measurements
  */
-class LayoutNodeTreeParser {
+class LayoutNodeTreeParser(
+    private val recompositionTracker: RecompositionTracker? = null
+) {
 
     fun parse(composeView: View): InspectorTree {
         try {
@@ -67,15 +70,23 @@ class LayoutNodeTreeParser {
             parseLayoutNode(child, depth + 1, index)
         }
 
-        val id = "${baseName}_d${depth}_s${siblingIndex}_${node.hashCode()}"
+        val stableId = "${baseName}_d${depth}_s${siblingIndex}"
+
+        // Compute content fingerprint for recomposition detection
+        val fingerprint = Objects.hash(
+            textContent,
+            bounds,
+            modifiers.map { "${it.name}=${it.value}" }
+        )
+        recompositionTracker?.recordFingerprint(stableId, fingerprint)
 
         return InspectorNode(
-            id = id,
+            id = stableId,
             name = displayName,
             sourceLocation = null,
             parameters = allParams,
             bounds = bounds,
-            recompositionCount = 0,
+            recompositionCount = recompositionTracker?.getCount(stableId) ?: 0,
             children = childNodes,
             depth = depth
         )

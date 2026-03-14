@@ -9,9 +9,25 @@ import java.util.concurrent.atomic.AtomicInteger
 class RecompositionTracker {
 
     private val counts = ConcurrentHashMap<String, AtomicInteger>()
+    private val fingerprints = ConcurrentHashMap<String, Int>()
 
     fun onRecomposition(nodeId: String) {
         counts.getOrPut(nodeId) { AtomicInteger(0) }.incrementAndGet()
+    }
+
+    /**
+     * Records a content fingerprint for the given node.
+     * If the fingerprint differs from the previously recorded value,
+     * the recomposition count is incremented.
+     * First call for a node only stores the fingerprint without incrementing.
+     */
+    fun recordFingerprint(stableId: String, fingerprint: Int) {
+        fingerprints.compute(stableId) { _, previous ->
+            if (previous != null && previous != fingerprint) {
+                counts.getOrPut(stableId) { AtomicInteger(0) }.incrementAndGet()
+            }
+            fingerprint
+        }
     }
 
     fun getCount(nodeId: String): Int = counts[nodeId]?.get() ?: 0
@@ -20,5 +36,6 @@ class RecompositionTracker {
 
     fun reset() {
         counts.clear()
+        fingerprints.clear()
     }
 }
