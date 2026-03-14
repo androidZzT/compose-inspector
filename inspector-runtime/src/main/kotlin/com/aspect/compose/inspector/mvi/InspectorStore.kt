@@ -1,52 +1,23 @@
 package com.aspect.compose.inspector.mvi
 
-import android.util.Log
-import androidx.compose.ui.tooling.data.Group
-import androidx.compose.ui.tooling.data.UiToolingDataApi
-import com.aspect.compose.inspector.core.CompositionTreeParser
-import com.aspect.compose.inspector.core.RecompositionTracker
-import com.aspect.compose.inspector.core.SubcompositionResolver
 import com.aspect.compose.inspector.model.InspectorNode
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
-
-private const val TAG = "InspectorStore"
 
 /**
  * MVI Store that processes [InspectorIntent]s and produces [InspectorState].
  *
- * Tree parsing is performed asynchronously on [Dispatchers.Default] to avoid
- * blocking the main thread, as SlotTable traversal can be expensive (~800ms
- * for complex UIs).
+ * Tree data arrives pre-parsed via [InspectorIntent.AttachLayoutTree] from the
+ * LayoutNode reflection parser; this store handles state management only.
  */
-@OptIn(UiToolingDataApi::class)
-class InspectorStore(
-    private val treeParser: CompositionTreeParser = CompositionTreeParser(),
-    private val subcompositionResolver: SubcompositionResolver = SubcompositionResolver(),
-    private val recompositionTracker: RecompositionTracker = RecompositionTracker()
-) {
-
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+class InspectorStore {
 
     private val _state = MutableStateFlow(InspectorState())
     val state: StateFlow<InspectorState> = _state.asStateFlow()
 
-    private var lastRootGroup: Group? = null
-
     fun dispatch(intent: InspectorIntent) {
         when (intent) {
-            is InspectorIntent.AttachTo -> {
-                lastRootGroup = intent.rootGroup
-                _state.value = _state.value.copy(isLoading = true, error = null, isOverlayVisible = true)
-                parseTreeAsync(intent.rootGroup)
-            }
-
             is InspectorIntent.AttachLayoutTree -> {
                 // Auto-expand first 3 levels for immediate visibility
                 val expandedIds = mutableSetOf<String>()
@@ -67,16 +38,6 @@ class InspectorStore(
                     isOverlayVisible = true,
                     error = null
                 )
-            }
-
-            is InspectorIntent.RefreshTree -> {
-                val group = lastRootGroup
-                if (group == null) {
-                    _state.value = _state.value.copy(error = "No composition attached")
-                } else {
-                    _state.value = _state.value.copy(isLoading = true, error = null)
-                    parseTreeAsync(group)
-                }
             }
 
             is InspectorIntent.SelectNode -> {
@@ -101,26 +62,7 @@ class InspectorStore(
     }
 
     fun destroy() {
-        scope.cancel()
-    }
-
-    private fun parseTreeAsync(rootGroup: Group) {
-        scope.launch {
-            try {
-                val tree = treeParser.parse(rootGroup)
-                _state.value = _state.value.copy(
-                    tree = tree.roots,
-                    isLoading = false,
-                    error = null
-                )
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to parse composition tree", e)
-                _state.value = _state.value.copy(
-                    isLoading = false,
-                    error = "Failed to parse tree: ${e.message}"
-                )
-            }
-        }
+        // No-op for now; kept for API compatibility with ComposeInspector.onDispose
     }
 
     private fun findNode(

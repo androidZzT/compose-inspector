@@ -198,21 +198,10 @@ class InspectorStoreTest {
         assertFalse(store.state.value.isOverlayVisible)
     }
 
-    // --- RefreshTree (no composition attached) ---
-
-    @Test
-    fun `RefreshTree without attached composition sets error`() {
-        store.dispatch(InspectorIntent.RefreshTree)
-
-        assertNotNull(store.state.value.error)
-    }
-
     // --- Helpers ---
 
     private fun storeWithTree(tree: List<InspectorNode>): InspectorStore {
         return InspectorStore().also { s ->
-            // Use reflection to set tree state for testing since there's no
-            // public API to set tree directly yet (AttachTo/RefreshTree are TODO)
             val stateField = InspectorStore::class.java.getDeclaredField("_state")
             stateField.isAccessible = true
             @Suppress("UNCHECKED_CAST")

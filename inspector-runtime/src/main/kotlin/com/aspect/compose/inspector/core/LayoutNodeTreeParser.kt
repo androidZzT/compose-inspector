@@ -21,9 +21,6 @@ private const val TAG = "LayoutNodeTreeParser"
  */
 class LayoutNodeTreeParser {
 
-    // Cache field lookups to avoid repeated reflection
-    private val fieldCache = HashMap<Class<*>, Map<String, java.lang.reflect.Field>>()
-
     fun parse(composeView: View): InspectorTree {
         try {
             val rootLayoutNode = getRootLayoutNode(composeView) ?: run {
